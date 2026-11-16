@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"reflect"
+	"strconv"
 
 	"github.com/ubiquiti-community/go-unifi/unifi/settings"
 )
@@ -129,10 +130,21 @@ func jsonValuesEqual(a, b any) bool {
 	case string, float64:
 		switch b.(type) {
 		case string, float64:
-			return fmt.Sprint(a) == fmt.Sprint(b)
+			return jsonScalarString(a) == jsonScalarString(b)
 		}
 	}
 	return false
+}
+
+// jsonScalarString formats a decoded JSON string or number for comparison.
+// Numbers use their exact decimal form: fmt.Sprint would render a millisecond
+// timestamp such as the mgmt x_ssh_keys[].date 1792980365277 as
+// "1.792980365277e+12", which never matches the string form go-unifi sends.
+func jsonScalarString(v any) string {
+	if f, ok := v.(float64); ok {
+		return strconv.FormatFloat(f, 'f', -1, 64)
+	}
+	return fmt.Sprint(v)
 }
 
 func isZeroJSON(v any) bool {

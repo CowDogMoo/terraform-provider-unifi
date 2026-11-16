@@ -1,0 +1,3 @@
+kind: fix
+body: '**`unifi_setting`: `mgmt` reads again on UniFi Network 11.** Network 11 returns `x_ssh_keys[].date` as a number, which go-unifi could not decode, so every plan failed reading the setting; the mgmt setting is now decoded from the raw setting with numeric dates kept as their exact decimal string, and an unchanged SSH key list is no longer re-sent on mgmt updates'
+time: 2026-11-15T17:41:04.217591-07:00

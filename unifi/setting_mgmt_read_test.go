@@ -6,6 +6,8 @@ import (
 	"reflect"
 	"testing"
 
+	fwresource "github.com/hashicorp/terraform-plugin-framework/resource"
+	"github.com/hashicorp/terraform-plugin-framework/types/basetypes"
 	ui "github.com/ubiquiti-community/go-unifi/unifi"
 	"github.com/ubiquiti-community/go-unifi/unifi/settings"
 )
@@ -128,4 +130,88 @@ func Test_writeSetting_mgmtNumericSSHKeyDateUnchanged(t *testing.T) {
 	if got := puts()["mgmt"]; !reflect.DeepEqual(got, want) {
 		t.Errorf("mgmt PUT = %v, want %v", got, want)
 	}
+}
+
+// The reported failure: UniFi Network 11.0.99 returns x_ssh_keys[].date as a
+// number, and every resource path that reads the mgmt setting (import,
+// refresh, create, update) stopped with "Error Reading Mgmt Setting".
+func Test_settingResource_mgmtNumericSSHKeyDate(t *testing.T) {
+	ctx := context.Background()
+	stored := func() []map[string]any {
+		return []map[string]any{storedMgmtWithSSHKey(float64(1792980365277))}
+	}
+
+	t.Run("import and refresh", func(t *testing.T) {
+		r, puts := newSettingsFakeController(t, stored())
+		imported := importSettings(ctx, t, r, false)
+		if imported.Diagnostics.HasError() {
+			t.Fatalf("ImportState: %v", imported.Diagnostics)
+		}
+		var state settingResourceModel
+		if d := imported.State.Get(ctx, &state); d.HasError() {
+			t.Fatalf("reading imported state: %v", d)
+		}
+		var mgmt settingMgmtModel
+		if d := state.Mgmt.As(ctx, &mgmt, basetypes.ObjectAsOptions{}); d.HasError() {
+			t.Fatalf("mgmt: %v", d)
+		}
+		var ssh settingMgmtSSHModel
+		if d := mgmt.SSH.As(ctx, &ssh, basetypes.ObjectAsOptions{}); d.HasError() {
+			t.Fatalf("mgmt.ssh: %v", d)
+		}
+		var keys []sshKeyModel
+		if d := ssh.Keys.ElementsAs(ctx, &keys, false); d.HasError() {
+			t.Fatalf("mgmt.ssh.keys: %v", d)
+		}
+		if len(keys) != 1 || keys[0].Name.ValueString() != "laptop" ||
+			keys[0].Key.ValueString() != "AAAAC3NzaC1lZDI1NTE5AAAAIExample" {
+			t.Errorf("imported mgmt.ssh.keys = %+v, want the controller's one key", keys)
+		}
+
+		read := &fwresource.ReadResponse{State: imported.State, Identity: imported.Identity}
+		r.Read(ctx, fwresource.ReadRequest{
+			State: imported.State, Identity: imported.Identity,
+		}, read)
+		if read.Diagnostics.HasError() {
+			t.Fatalf("Read: %v", read.Diagnostics)
+		}
+		if diffs, err := imported.State.Raw.Diff(read.State.Raw); err != nil || len(diffs) != 0 {
+			t.Errorf("refresh after import changed the state: %v (%v)", diffs, err)
+		}
+		if got := puts(); len(got) != 0 {
+			t.Errorf("import and refresh wrote %v, want no writes", got)
+		}
+	})
+
+	// mgmt.ssh.keys is in neither the configuration nor the state, so each
+	// write carries the stored keys through and does not re-send them.
+	t.Run("create and update", func(t *testing.T) {
+		r, puts := newSettingsFakeController(t, stored())
+		mgmtConfig := func(wifiman bool) map[string]any {
+			return map[string]any{"mgmt": map[string]any{"wifiman_enabled": wifiman}}
+		}
+
+		created := createSettings(t, r, mgmtConfig(true))
+		if created.Diagnostics.HasError() {
+			t.Fatalf("Create: %v", created.Diagnostics)
+		}
+		want := map[string]map[string]any{"mgmt": {"key": "mgmt", "wifiman_enabled": true}}
+		if got := puts(); !reflect.DeepEqual(got, want) {
+			t.Errorf("create wrote %v, want %v", got, want)
+		}
+
+		s := resourceSchema(t, r)
+		attrs := mgmtConfig(false)
+		updated := &fwresource.UpdateResponse{State: created.State, Identity: created.Identity}
+		r.Update(ctx, fwresource.UpdateRequest{
+			Plan: tfPlan(t, s, attrs), Config: tfConfig(t, s, attrs), State: created.State,
+		}, updated)
+		if updated.Diagnostics.HasError() {
+			t.Fatalf("Update: %v", updated.Diagnostics)
+		}
+		want = map[string]map[string]any{"mgmt": {"key": "mgmt", "wifiman_enabled": false}}
+		if got := puts(); !reflect.DeepEqual(got, want) {
+			t.Errorf("update wrote %v, want %v", got, want)
+		}
+	})
 }

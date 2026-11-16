@@ -5,7 +5,6 @@ import (
 	"encoding/json"
 	"fmt"
 	"maps"
-	"strconv"
 
 	ui "github.com/ubiquiti-community/go-unifi/unifi"
 	"github.com/ubiquiti-community/go-unifi/unifi/settings"
@@ -75,6 +74,6 @@ func sshKeyWithStringDate(key any) any {
 		return key
 	}
 	out := maps.Clone(m)
-	out["date"] = strconv.FormatFloat(date, 'f', -1, 64)
+	out["date"] = jsonScalarString(date)
 	return out
 }

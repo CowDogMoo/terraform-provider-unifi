@@ -5910,9 +5910,10 @@ const ipsSuppressionSettingKey = "ips_suppression"
 // nested on controllers without the standalone ips_suppression document.
 const ipsSettingKey = "ips"
 
-// readRawSettingData fetches a site setting by its raw key, for setting keys
-// the go-unifi client has no typed struct for. found is false when the
-// controller has no setting stored under that key.
+// readRawSettingData fetches a site setting by its raw key, for settings the
+// go-unifi client has no typed struct for or whose typed struct cannot
+// represent the stored document. found is false when the controller has no
+// setting stored under that key.
 func (r *settingResource) readRawSettingData(
 	ctx context.Context,
 	site string,

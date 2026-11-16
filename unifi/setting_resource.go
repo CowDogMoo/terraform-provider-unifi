@@ -2790,7 +2790,7 @@ func (r *settingResource) Create(
 		}
 
 		// Read current remote settings as the base so unset fields keep their values.
-		_, currentMgmt, err := ui.GetSetting[*settings.Mgmt](r.client.ApiClient, ctx, site)
+		currentMgmt, err := r.readMgmtSetting(ctx, site)
 		if err != nil {
 			var notFound *ui.NotFoundError
 			if !errors.As(err, &notFound) {
@@ -3225,7 +3225,7 @@ func (r *settingResource) Update(
 		}
 
 		// Read current remote settings as the base so unset fields keep their values.
-		_, currentMgmt, err := ui.GetSetting[*settings.Mgmt](r.client.ApiClient, ctx, site)
+		currentMgmt, err := r.readMgmtSetting(ctx, site)
 		if err != nil {
 			var notFound *ui.NotFoundError
 			if !errors.As(err, &notFound) {
@@ -3852,7 +3852,7 @@ func (r *settingResource) readSettings(
 			return
 		}
 
-		_, mgmtSetting, err := ui.GetSetting[*settings.Mgmt](r.client.ApiClient, ctx, site)
+		mgmtSetting, err := r.readMgmtSetting(ctx, site)
 		if err != nil {
 			diags.AddError("Error Reading Mgmt Setting", err.Error())
 			return
@@ -5910,9 +5910,10 @@ const ipsSuppressionSettingKey = "ips_suppression"
 // nested on controllers without the standalone ips_suppression document.
 const ipsSettingKey = "ips"
 
-// readRawSettingData fetches a site setting by its raw key, for setting keys
-// the go-unifi client has no typed struct for. found is false when the
-// controller has no setting stored under that key.
+// readRawSettingData fetches a site setting by its raw key, for settings the
+// go-unifi client has no typed struct for or whose typed struct cannot
+// represent the stored document. found is false when the controller has no
+// setting stored under that key.
 func (r *settingResource) readRawSettingData(
 	ctx context.Context,
 	site string,
